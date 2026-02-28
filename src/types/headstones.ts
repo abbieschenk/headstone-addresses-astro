@@ -27,3 +27,7 @@ export interface Headstone extends HeadstoneRow {
     x: number;
     y: number;
 }
+
+export const isHeadstone = (headstoneOrAddress: Address | Headstone): headstoneOrAddress is Headstone => {
+    return 'address' in headstoneOrAddress;
+};

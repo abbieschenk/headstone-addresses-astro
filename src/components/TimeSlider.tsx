@@ -1,6 +1,24 @@
 import '../styles/time-slider.css';
 
-export default function TimeSlider({ min, max, start, end, onStartChange, onEndChange, className = '' }) {
+export interface TimeSliderProps {
+    className?: string;
+    end: number;
+    max: number;
+    min: number;
+    onEndChange?: (value: number) => void;
+    onStartChange?: (value: number) => void;
+    start: number;
+}
+
+export default function TimeSlider({
+    min,
+    max,
+    start,
+    end,
+    onStartChange,
+    onEndChange,
+    className = '',
+}: TimeSliderProps) {
     const span = Math.max(max - min, 1);
     const minPercent = ((start - min) / span) * 100;
     const maxPercent = ((end - min) / span) * 100;
