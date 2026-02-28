@@ -1,16 +1,21 @@
+import '../styles/address-graph.css';
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import InfoPanel from './InfoPanel';
+
+import type { Headstone } from 'src/types/headstones';
+import type { Address } from 'src/types/addresses';
+
 import TimeSlider from './TimeSlider';
-import '../styles/address-graph.css';
+import InfoPanel from './InfoPanel';
 
 const HEIGHT = 250;
 const WIDTH = 500;
 
-const generatePathData = (origin, target, transform) => {
+const generatePathData = (origin: Headstone | Address, target: Headstone | Address, transform?: d3.ZoomTransform) => {
     const left = 0;
     const right = 1;
-    const dirVal = origin.AddressObj ? left : right;
+    const dirVal = 'address' in origin ? left : right;
 
     const targetX =
         target.x * (dirVal === right && transform?.k ? transform.k : 1) +
@@ -32,53 +37,49 @@ const generatePathData = (origin, target, transform) => {
     return `M${originX},${originY}A${dr},${dr} 0 0,${dirVal} ${targetX},${targetY}`;
 };
 
-const toNumber = (value) => {
+const toNumber = (value: string) => {
     const number = Number.parseInt(value, 10);
     return Number.isFinite(number) ? number : 0;
 };
 
-const getFiniteYears = (rows, key) =>
-    rows
-        .map((row) => row[key]?.trim())
-        .filter(Boolean)
-        .map((year) => Number(year))
-        .filter((year) => Number.isFinite(year));
+export type AddressGraphProps = {
+    addresses: Address[];
+    dateRange: { min: number; max: number };
+    headstones: Headstone[];
+};
 
-export default function AddressGraph({ headstones = [], addresses = [] }) {
+export default function AddressGraph({ addresses, dateRange, headstones }: AddressGraphProps) {
     const [timeFilterEnabled, setTimeFilterEnabled] = useState(false);
     const [showAll, setShowAll] = useState(false);
-    const [selected, setSelected] = useState({});
+    const [selected, setSelected] = useState<{
+        headstone?: Headstone;
+        address?: Address;
+    }>({});
 
-    const d3ref = useRef(null);
-    const timeToggle = useRef(null);
+    const d3ref = useRef<SVGSVGElement | null>(null);
+    const timeToggle = useRef<HTMLInputElement | null>(null);
 
-    const yearDomain = useMemo(() => {
-        const birthYears = getFiniteYears(headstones, 'BirthYear');
-        const deathYears = getFiniteYears(headstones, 'DeathYear');
+    const [selectedRange, setSelectedRange] = useState(dateRange);
 
-        if (!birthYears.length || !deathYears.length) {
-            return { min: 0, max: 0 };
-        }
-
-        return {
-            min: Math.min(...birthYears),
-            max: Math.max(...deathYears),
-        };
-    }, [headstones]);
-    const [selectedRange, setSelectedRange] = useState(() => yearDomain);
     const hasRenderableData =
-        headstones.length > 0 && addresses.length > 0 && yearDomain.min !== 0 && yearDomain.max !== 0;
+        headstones.length > 0 && addresses.length > 0 && dateRange.min !== 0 && dateRange.max !== 0;
 
     const isInDateRange = useCallback(
-        (headstone) =>
+        (headstone: Headstone) =>
             !timeFilterEnabled ||
             (Number(headstone.BirthYear) >= selectedRange.min && Number(headstone.DeathYear) <= selectedRange.max),
         [selectedRange.max, selectedRange.min, timeFilterEnabled]
     );
 
-    const drawPath = useCallback((path) => {
+    const drawPath = useCallback((path: d3.Selection<SVGPathElement, Headstone, d3.BaseType, unknown>) => {
         if (path.attr('opacity') === '0') {
-            const totalLength = path.node().getTotalLength();
+            const pathNode = path.node();
+
+            if (!pathNode) {
+                return;
+            }
+
+            const totalLength = pathNode.getTotalLength();
 
             path.attr('stroke-dasharray', `${totalLength} ${totalLength}`)
                 .attr('stroke-dashoffset', totalLength)
@@ -90,57 +91,12 @@ export default function AddressGraph({ headstones = [], addresses = [] }) {
         }
     }, []);
 
-    const graphData = useMemo(() => {
-        if (!headstones.length || !addresses.length) {
-            return { plottedHeadstones: [], plottedAddresses: [] };
+    useEffect(() => {
+        if (!d3ref.current) {
+            return;
         }
 
-        const plottedAddresses = addresses.map((address) => ({
-            ...address,
-            x: toNumber(address.LocX),
-            y: toNumber(address.LocY),
-        }));
-        const addressMap = new Map(plottedAddresses.map((address) => [address.NameEnglish, address]));
-        const maxLocX = Math.max(...headstones.map((headstone) => toNumber(headstone.LocX)));
-        const maxLocY = Math.max(...headstones.map((headstone) => toNumber(headstone.LocY)));
-        const max = Math.max(maxLocX, maxLocY);
-        const yScale = d3.scaleLinear().domain([0, max]).range([max, 0]);
-        const xScale = d3.scaleLinear().domain([0, max]).range([0, max]);
-
-        const plottedHeadstones = headstones
-            .map((headstone) => {
-                const address = addressMap.get(headstone.City);
-
-                if (!address) {
-                    return null;
-                }
-
-                let x = toNumber(headstone.LocX) * 5;
-                let y = toNumber(headstone.LocY) * 5;
-
-                if (headstone.CemeteryName === 'Beechmount') {
-                    x += 600;
-                    y += 400;
-                } else if (headstone.CemeteryName === 'Mount Pleasant') {
-                    x += 400;
-                } else if (headstone.CemeteryName === 'Edmonton') {
-                    y += 400;
-                }
-
-                return {
-                    ...headstone,
-                    AddressObj: address,
-                    x: xScale(x),
-                    y: yScale(y),
-                };
-            })
-            .filter(Boolean);
-
-        return { plottedHeadstones, plottedAddresses };
-    }, [addresses, headstones]);
-
-    useEffect(() => {
-        const svg = d3.select(d3ref.current);
+        const svg = d3.select<SVGSVGElement, undefined>(d3ref.current);
         svg.selectAll('*').remove();
 
         svg.append('rect')
@@ -149,11 +105,15 @@ export default function AddressGraph({ headstones = [], addresses = [] }) {
     }, []);
 
     useEffect(() => {
-        if (!graphData.plottedHeadstones.length || !graphData.plottedAddresses.length) {
+        if (!headstones.length || !addresses.length) {
             return;
         }
 
-        const svg = d3.select(d3ref.current);
+        if (!d3ref.current) {
+            return;
+        }
+
+        const svg = d3.select<SVGSVGElement, undefined>(d3ref.current);
         svg.selectAll('.address,.headstone,.connection,.china,.edmonton').remove();
 
         svg.append('path')
@@ -175,12 +135,12 @@ export default function AddressGraph({ headstones = [], addresses = [] }) {
             .attr('class', 'edmonton river')
             .attr('d', 'M11.25,727.718l211.36,-267.912l296.494,-16.665l344.548,-76.374');
 
-        svg.selectAll('.headstone')
-            .data(graphData.plottedHeadstones)
+        svg.selectAll<SVGCircleElement, Headstone>('.headstone')
+            .data(headstones)
             .enter()
             .append('circle')
             .attr('class', 'node headstone')
-            .style('fill', (headstone) => headstone.AddressObj.Color)
+            .style('fill', (headstone) => headstone.address.Color)
             .attr('cx', (headstone) => headstone.x)
             .attr('cy', (headstone) => headstone.y)
             .attr('r', 2)
@@ -202,30 +162,30 @@ export default function AddressGraph({ headstones = [], addresses = [] }) {
             .attr('fill', 'none')
             .attr('d', 'M19.753,232.191l-11.115,6.938l5.712,10.871l10.437,-6.539l3.089,-8.37l-8.123,-2.9Z');
 
-        svg.selectAll('.headstone-to-address')
-            .data(graphData.plottedHeadstones)
+        svg.selectAll<SVGPathElement, Headstone>('.headstone-to-address')
+            .data(headstones)
             .enter()
             .append('path')
             .attr('class', 'connection headstone-to-address')
-            .style('stroke', (headstone) => headstone.AddressObj.Color)
+            .style('stroke', (headstone) => headstone.address.Color)
             .style('stroke-width', 0.6)
             .style('fill', 'none')
-            .attr('d', (headstone) => generatePathData(headstone, headstone.AddressObj))
+            .attr('d', (headstone) => generatePathData(headstone, headstone.address))
             .attr('opacity', 0);
 
-        svg.selectAll('.address-to-headstone')
-            .data(graphData.plottedHeadstones)
+        svg.selectAll<SVGPathElement, Headstone>('.address-to-headstone')
+            .data(headstones)
             .enter()
             .append('path')
             .attr('class', 'connection address-to-headstone')
-            .style('stroke', (headstone) => headstone.AddressObj.Color)
+            .style('stroke', (headstone) => headstone.address.Color)
             .style('stroke-width', 0.6)
             .style('fill', 'none')
-            .attr('d', (headstone) => generatePathData(headstone.AddressObj, headstone))
+            .attr('d', (headstone) => generatePathData(headstone.address, headstone))
             .attr('opacity', 0);
 
-        svg.selectAll('.address')
-            .data(graphData.plottedAddresses)
+        svg.selectAll<SVGRectElement, Address>('.address')
+            .data(addresses)
             .enter()
             .append('rect')
             .attr('class', 'node address')
@@ -237,103 +197,124 @@ export default function AddressGraph({ headstones = [], addresses = [] }) {
             .on('click', (_, address) => setSelected({ address }));
 
         const zoom = d3
-            .zoom()
+            .zoom<SVGSVGElement, undefined>()
             .scaleExtent([0.3, 8])
             .translateExtent([
                 [-1000, -750],
                 [1000, 200],
             ])
-            .on('zoom', (event) => {
-                svg.selectAll('.headstone,.edmonton').attr('transform', event.transform);
+            .on('zoom', (event: d3.D3ZoomEvent<SVGSVGElement, undefined>) => {
+                svg.selectAll<SVGElement, unknown>('.headstone,.edmonton').attr(
+                    'transform',
+                    event.transform.toString()
+                );
 
-                svg.selectAll('.edmonton').attr(
+                svg.selectAll<SVGPathElement, unknown>('.edmonton').attr(
                     'transform',
                     `translate(${-86.5 * (event.transform.k || 1) + (event.transform.x || 0)} ${-730 * (event.transform.k || 1) + (event.transform.y || 0)}) scale(${event.transform.k || 0})`
                 );
 
-                svg.selectAll('.headstone-to-address').attr('d', (headstone) =>
-                    generatePathData(headstone, headstone.AddressObj, event.transform)
+                svg.selectAll<SVGPathElement, Headstone>('.headstone-to-address').attr('d', (headstone) =>
+                    generatePathData(headstone, headstone.address, event.transform)
                 );
 
-                svg.selectAll('.address-to-headstone').attr('d', (headstone) =>
-                    generatePathData(headstone.AddressObj, headstone, event.transform)
+                svg.selectAll<SVGPathElement, Headstone>('.address-to-headstone').attr('d', (headstone) =>
+                    generatePathData(headstone.address, headstone, event.transform)
                 );
 
-                svg.selectAll("path[opacity='1']").attr('stroke-dasharray', (_, index, nodes) => {
-                    const totalLength = nodes[index].getTotalLength();
-                    return `${totalLength} ${totalLength}`;
+                svg.selectAll<SVGPathElement, unknown>("path[opacity='1']").each(function () {
+                    const totalLength = this.getTotalLength();
+                    d3.select(this).attr('stroke-dasharray', `${totalLength} ${totalLength}`);
                 });
             });
 
         zoom.scaleTo(svg, 0.3);
         zoom.translateTo(svg, 0, -275);
         svg.call(zoom);
-    }, [graphData, isInDateRange]);
+    }, [isInDateRange]);
 
     useEffect(() => {
-        if (!graphData.plottedHeadstones.length) {
+        if (!headstones.length) {
             return;
         }
 
-        const svg = d3.select(d3ref.current);
+        if (!d3ref.current) {
+            return;
+        }
 
-        svg.selectAll('.address,.headstone')
-            .filter((datum) => datum.City && isInDateRange(datum))
+        const svg = d3.select<SVGSVGElement, undefined>(d3ref.current);
+
+        svg.selectAll<SVGCircleElement, Headstone>('.headstone')
+            .filter((datum) => isInDateRange(datum))
             .attr('opacity', 1)
             .style('cursor', 'pointer');
 
-        svg.selectAll('.address,.headstone')
-            .filter((datum) => datum.City && !isInDateRange(datum))
+        svg.selectAll<SVGCircleElement, Headstone>('.headstone')
+            .filter((datum) => !isInDateRange(datum))
             .attr('opacity', 0.3)
             .style('cursor', 'default');
-    }, [graphData, isInDateRange]);
+    }, [isInDateRange]);
 
     useEffect(() => {
-        const svg = d3.select(d3ref.current);
+        if (!d3ref.current) {
+            return;
+        }
+
+        const svg = d3.select<SVGSVGElement, undefined>(d3ref.current);
         svg.selectAll('.node').classed('selected', false);
 
         if (selected.headstone) {
             if (!isInDateRange(selected.headstone)) {
                 setSelected({});
             } else {
-                d3.selectAll('.headstone')
+                d3.selectAll<SVGCircleElement, Headstone>('.headstone')
                     .filter((headstone) => headstone === selected.headstone)
                     .classed('selected', true);
             }
         } else if (selected.address) {
-            d3.selectAll('.address')
+            d3.selectAll<SVGRectElement, Address>('.address')
                 .filter((address) => address === selected.address)
                 .classed('selected', true);
         }
     }, [isInDateRange, selected]);
 
     useEffect(() => {
-        const svg = d3.select(d3ref.current);
+        if (!d3ref.current) {
+            return;
+        }
+
+        const svg = d3.select<SVGSVGElement, undefined>(d3ref.current);
 
         if (showAll) {
-            svg.selectAll('.address-to-headstone,.headstone-to-address')
+            svg.selectAll<SVGPathElement, Headstone>('.address-to-headstone,.headstone-to-address')
                 .filter((headstone) => !isInDateRange(headstone))
                 .attr('opacity', 0);
 
-            svg.selectAll('.address-to-headstone')
+            svg.selectAll<SVGPathElement, Headstone>('.address-to-headstone')
                 .filter((headstone) => isInDateRange(headstone))
-                .each((_, index, nodes) => drawPath(d3.select(nodes[index])));
+                .each((_, index, nodes) =>
+                    drawPath(d3.select(nodes[index]) as d3.Selection<SVGPathElement, Headstone, d3.BaseType, unknown>)
+                );
         } else if (selected.headstone) {
-            svg.selectAll('.connection')
+            svg.selectAll<SVGPathElement, Headstone>('.connection')
                 .filter((headstone) => selected.headstone !== headstone)
                 .attr('opacity', 0);
 
-            svg.selectAll('.headstone-to-address')
+            svg.selectAll<SVGPathElement, Headstone>('.headstone-to-address')
                 .filter((headstone) => selected.headstone === headstone)
-                .each((_, index, nodes) => drawPath(d3.select(nodes[index])));
+                .each((_, index, nodes) =>
+                    drawPath(d3.select(nodes[index]) as d3.Selection<SVGPathElement, Headstone, d3.BaseType, unknown>)
+                );
         } else if (selected.address) {
-            svg.selectAll('.connection')
-                .filter((headstone) => selected.address !== headstone.AddressObj || !isInDateRange(headstone))
+            svg.selectAll<SVGPathElement, Headstone>('.connection')
+                .filter((headstone) => selected.address !== headstone.address || !isInDateRange(headstone))
                 .attr('opacity', 0);
 
-            svg.selectAll('.address-to-headstone')
-                .filter((headstone) => selected.address === headstone.AddressObj && isInDateRange(headstone))
-                .each((_, index, nodes) => drawPath(d3.select(nodes[index])));
+            svg.selectAll<SVGPathElement, Headstone>('.address-to-headstone')
+                .filter((headstone) => selected.address === headstone.address && isInDateRange(headstone))
+                .each((_, index, nodes) =>
+                    drawPath(d3.select(nodes[index]) as d3.Selection<SVGPathElement, Headstone, d3.BaseType, unknown>)
+                );
         } else {
             svg.selectAll('.connection').attr('opacity', 0);
         }
@@ -372,18 +353,18 @@ export default function AddressGraph({ headstones = [], addresses = [] }) {
                 </div>
                 <TimeSlider
                     className={timeFilterEnabled ? 'active' : 'disabled'}
-                    min={yearDomain.min}
-                    max={yearDomain.max}
+                    min={dateRange.min}
+                    max={dateRange.max}
                     start={selectedRange.min}
                     end={selectedRange.max}
-                    onStartChange={(value) => {
+                    onStartChange={(value: number) => {
                         setSelectedRange((current) => ({ ...current, min: value }));
                         if (timeToggle.current) {
                             timeToggle.current.checked = true;
                         }
                         setTimeFilterEnabled(true);
                     }}
-                    onEndChange={(value) => {
+                    onEndChange={(value: number) => {
                         setSelectedRange((current) => ({ ...current, max: value }));
                         if (timeToggle.current) {
                             timeToggle.current.checked = true;
