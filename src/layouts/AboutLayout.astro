@@ -2,33 +2,32 @@
 import BaseLayout from './BaseLayout.astro';
 
 interface Props {
-  title?: string;
+    title?: string;
 }
 
 const { title = 'About | Headstone Addresses' } = Astro.props;
 const pathname = Astro.url.pathname.replace(/\/$/, '') || '/';
 const links = [
-  { href: '/about', label: 'About' },
-  { href: '/about/contributors', label: 'Contributors' },
-  { href: '/about/methodology', label: 'Methodology' },
-  { href: '/about/support', label: 'Support' },
+    { href: '/about', label: 'About' },
+    { href: '/about/contributors', label: 'Contributors' },
+    { href: '/about/methodology', label: 'Methodology' },
+    { href: '/about/support', label: 'Support' },
 ];
 ---
 
 <BaseLayout title={title} mainClass="about">
-  <div class="about-menu">
-    {links.map((link) => (
-      <a
-        href={link.href}
-        class:list={['about-link', pathname === link.href && 'active']}
-      >
-        {link.label}
-      </a>
-    ))}
-  </div>
-  <div class="about-background">
-    <div class="about-content fade-in">
-      <slot />
+    <div class="about-menu">
+        {
+            links.map((link) => (
+                <a href={link.href} class:list={['about-link', pathname === link.href && 'active']}>
+                    {link.label}
+                </a>
+            ))
+        }
     </div>
-  </div>
+    <div class="about-background">
+        <div class="about-content fade-in">
+            <slot />
+        </div>
+    </div>
 </BaseLayout>
