@@ -1,0 +1,29 @@
+---
+import AboutLayout from '../../layouts/AboutLayout.astro';
+
+type AboutPageModule = typeof import('../../data/pages/about/index.md');
+
+export function getStaticPaths() {
+    const aboutPages = import.meta.glob<AboutPageModule>('../../data/pages/about/*.md');
+
+    return Object.keys(aboutPages).map((path) => {
+        const slug = path.endsWith('/index.md') ? undefined : path.split('/').at(-1)?.replace(/\.md$/, '');
+
+        return { params: { slug } };
+    });
+}
+
+const aboutPages = import.meta.glob<AboutPageModule>('../../data/pages/about/*.md');
+const slug = Astro.params.slug ?? 'index';
+const page = aboutPages[`../../data/pages/about/${slug}.md`];
+
+if (!page) {
+    throw new Error(`Unknown about page: ${slug}`);
+}
+
+const { Content, frontmatter } = await page();
+---
+
+<AboutLayout title={frontmatter.title}>
+    <Content />
+</AboutLayout>

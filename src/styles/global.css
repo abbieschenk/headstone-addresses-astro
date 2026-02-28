@@ -193,18 +193,23 @@ footer {
 
 .about img {
     width: 100%;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
 }
 
-.image {
+.about p:has(> img),
+.about p:has(> a > img) {
     margin: 0 auto;
     padding: 15px 0;
 }
 
-.image.logo {
+.about img[alt='Edmonton Heritage Council'] {
     width: 30%;
 }
 
-.image.case-study {
+.about img[alt='Logo case study drawings'],
+.about img[alt='Logo case study'] {
     width: 60%;
 }
 
