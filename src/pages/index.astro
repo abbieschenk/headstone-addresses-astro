@@ -1,8 +1,11 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import AddressGraph from '../components/AddressGraph.jsx';
+import { loadVisualizationData } from '../data/loadVisualizationData';
+
+const { headstones, addresses } = await loadVisualizationData();
 ---
 
 <BaseLayout>
-    <AddressGraph client:load />
+    <AddressGraph client:load headstones={headstones} addresses={addresses} />
 </BaseLayout>

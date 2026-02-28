@@ -37,79 +37,37 @@ const toNumber = (value) => {
     return Number.isFinite(number) ? number : 0;
 };
 
-export default function AddressGraph() {
-    const [headstones, setHeadstones] = useState([]);
-    const [addresses, setAddresses] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
+const getFiniteYears = (rows, key) =>
+    rows
+        .map((row) => row[key]?.trim())
+        .filter(Boolean)
+        .map((year) => Number(year))
+        .filter((year) => Number.isFinite(year));
+
+export default function AddressGraph({ headstones = [], addresses = [] }) {
     const [timeFilterEnabled, setTimeFilterEnabled] = useState(false);
     const [showAll, setShowAll] = useState(false);
     const [selected, setSelected] = useState({});
-    const [yearDomain, setYearDomain] = useState({ min: 0, max: 0 });
-    const [selectedRange, setSelectedRange] = useState({ min: 0, max: 0 });
 
     const d3ref = useRef(null);
     const timeToggle = useRef(null);
 
-    useEffect(() => {
-        let ignore = false;
+    const yearDomain = useMemo(() => {
+        const birthYears = getFiniteYears(headstones, 'BirthYear');
+        const deathYears = getFiniteYears(headstones, 'DeathYear');
 
-        async function loadData() {
-            try {
-                const [headstonesResponse, addressesResponse] = await Promise.all([
-                    fetch('/data/headstones.csv'),
-                    fetch('/data/addresses.csv'),
-                ]);
-
-                if (!headstonesResponse.ok || !addressesResponse.ok) {
-                    throw new Error('Failed to load CSV data.');
-                }
-
-                const [headstonesText, addressesText] = await Promise.all([
-                    headstonesResponse.text(),
-                    addressesResponse.text(),
-                ]);
-
-                if (ignore) {
-                    return;
-                }
-
-                const parsedHeadstones = d3.csvParse(headstonesText);
-                const parsedAddresses = d3.csvParse(addressesText);
-                const minBirthYear = Math.min(
-                    ...parsedHeadstones.map((headstone) =>
-                        headstone.BirthYear ? Number(headstone.BirthYear) : Number.MAX_SAFE_INTEGER
-                    )
-                );
-                const maxDeathYear = Math.max(
-                    ...parsedHeadstones.map((headstone) =>
-                        headstone.DeathYear ? Number(headstone.DeathYear) : Number.MIN_SAFE_INTEGER
-                    )
-                );
-
-                setHeadstones(parsedHeadstones);
-                setAddresses(parsedAddresses);
-                setYearDomain({ min: minBirthYear, max: maxDeathYear });
-                setSelectedRange({ min: minBirthYear, max: maxDeathYear });
-            } catch (loadError) {
-                if (!ignore) {
-                    setError(loadError instanceof Error ? loadError.message : 'Failed to load visualization data.');
-                }
-            } finally {
-                if (!ignore) {
-                    setLoading(false);
-                }
-            }
+        if (!birthYears.length || !deathYears.length) {
+            return { min: 0, max: 0 };
         }
 
-        loadData();
-
-        return () => {
-            ignore = true;
+        return {
+            min: Math.min(...birthYears),
+            max: Math.max(...deathYears),
         };
-    }, []);
-
-    const yearBoundsReady = yearDomain.min !== 0 && yearDomain.max !== 0;
+    }, [headstones]);
+    const [selectedRange, setSelectedRange] = useState(() => yearDomain);
+    const hasRenderableData =
+        headstones.length > 0 && addresses.length > 0 && yearDomain.min !== 0 && yearDomain.max !== 0;
 
     const isInDateRange = useCallback(
         (headstone) =>
@@ -381,12 +339,8 @@ export default function AddressGraph() {
         }
     }, [drawPath, isInDateRange, selected, showAll]);
 
-    if (error) {
-        return <section className="fade-in">{error}</section>;
-    }
-
-    if (loading || !yearBoundsReady) {
-        return <section className="fade-in">Loading visualization…</section>;
+    if (!hasRenderableData) {
+        return <section className="fade-in">Visualization data is unavailable.</section>;
     }
 
     return (

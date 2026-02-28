@@ -14,9 +14,13 @@
         "astro": "^5.18.0",
         "d3": "^7.9.0",
         "react": "^19.2.4",
-        "react-dom": "^19.2.4"
+        "react-dom": "^19.2.4",
+        "typescript": "^5.9.3"
     },
     "devDependencies": {
+        "@types/d3": "^7.4.3",
+        "@types/node": "^25.3.2",
+        "@types/react": "^19.2.14",
         "prettier": "^3.8.1",
         "prettier-plugin-astro": "^0.14.1"
     }
